@@ -1,0 +1,129 @@
+collection:
+  get:
+    operationId: listModels
+    summary: List available models and checkpoints
+    tags: [models]
+    parameters:
+      - $ref: '../training-service-openapi.yaml#/components/parameters/limitParam'
+      - $ref: '../training-service-openapi.yaml#/components/parameters/afterParam'
+      - name: source
+        in: query
+        schema:
+          type: string
+          enum: [catalog, checkpoint]
+      - name: family
+        in: query
+        schema:
+          type: string
+    responses:
+      '200':
+        description: List of models
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '../training-service-openapi.yaml#/components/schemas/ListMeta'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '../training-service-openapi.yaml#/components/schemas/Model'
+
+item:
+  get:
+    operationId: getModel
+    summary: Get a model
+    tags: [models]
+    parameters:
+      - name: model_path
+        in: path
+        required: true
+        schema:
+          type: string
+        description: URL-encoded model path (e.g. `tt%3A%2F%2Fcatalog%2Fllama-3.2-8b`)
+    responses:
+      '200':
+        description: Model
+        content:
+          application/json:
+            schema:
+              $ref: '../training-service-openapi.yaml#/components/schemas/Model'
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+
+  delete:
+    operationId: deleteModel
+    summary: Delete a checkpoint model
+    tags: [models]
+    parameters:
+      - name: model_path
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: Deleted
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                deleted:
+                  type: boolean
+                id:
+                  type: string
+      '400':
+        $ref: '../training-service-openapi.yaml#/components/responses/BadRequest'
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+
+download:
+  get:
+    operationId: getModelDownload
+    summary: Get pre-signed download URLs for a model
+    tags: [models]
+    parameters:
+      - name: model_path
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: format
+        in: query
+        schema:
+          type: string
+          default: safetensors
+      - name: component
+        in: query
+        schema:
+          type: string
+          default: all
+    responses:
+      '200':
+        description: Download URLs
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                object:
+                  type: string
+                  enum: [download]
+                urls:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      filename:
+                        type: string
+                      url:
+                        type: string
+                      bytes:
+                        type: integer
+                      expires_at:
+                        type: string
+                        format: date-time
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'

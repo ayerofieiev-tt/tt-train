@@ -1,0 +1,107 @@
+collection:
+  post:
+    operationId: uploadDataset
+    summary: Upload a dataset
+    tags: [datasets]
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required: [file, format]
+            properties:
+              file:
+                type: string
+                format: binary
+              format:
+                type: string
+                enum: [jsonl, csv, parquet]
+              name:
+                type: string
+              description:
+                type: string
+              metadata:
+                type: string
+                description: JSON-encoded metadata object
+    responses:
+      '201':
+        description: Dataset uploaded
+        content:
+          application/json:
+            schema:
+              $ref: '../training-service-openapi.yaml#/components/schemas/Dataset'
+      '400':
+        $ref: '../training-service-openapi.yaml#/components/responses/BadRequest'
+
+  get:
+    operationId: listDatasets
+    summary: List datasets
+    tags: [datasets]
+    parameters:
+      - $ref: '../training-service-openapi.yaml#/components/parameters/limitParam'
+      - $ref: '../training-service-openapi.yaml#/components/parameters/afterParam'
+      - name: format
+        in: query
+        schema:
+          type: string
+    responses:
+      '200':
+        description: List of datasets
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '../training-service-openapi.yaml#/components/schemas/ListMeta'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '../training-service-openapi.yaml#/components/schemas/Dataset'
+
+item:
+  get:
+    operationId: getDataset
+    summary: Get a dataset
+    tags: [datasets]
+    parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: Dataset
+        content:
+          application/json:
+            schema:
+              $ref: '../training-service-openapi.yaml#/components/schemas/Dataset'
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+
+  delete:
+    operationId: deleteDataset
+    summary: Delete a dataset
+    tags: [datasets]
+    parameters:
+      - name: dataset_id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: Deleted
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                deleted:
+                  type: boolean
+                id:
+                  type: string
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'

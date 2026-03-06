@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, Generic, Type, TypeVar
+
+import httpx
 
 from tt_train.http import HTTPClient
 from tt_train.types import (
@@ -16,6 +18,92 @@ from tt_train.types import (
     EvalResult,
     PaginatedList,
 )
+
+T = TypeVar("T")
+
+# Timeout for each retrieve poll: server holds for 45 s, so allow 55 s.
+_RETRIEVE_TIMEOUT = httpx.Timeout(55.0, connect=10.0)
+
+
+class APIFuture(Generic[T]):
+    """Handle for an in-progress async training operation.
+
+    The server accepted the command and is computing; call result() to
+    block until done. Each result() call issues a retrieve request that
+    long-polls for up to 45 s server-side, so the client-side timeout
+    never expires regardless of how long the computation takes.
+
+    Usage::
+
+        future = session.forward_backward(batch=batch)
+        result = future.result()          # blocks until done
+        result = future.result(timeout=120)  # with overall timeout
+
+        # Or await in async context:
+        result = await future
+    """
+
+    def __init__(
+        self,
+        http: HTTPClient,
+        session_id: str,
+        request_id: str,
+        model_cls: Type[T],
+        _on_result=None,
+    ):
+        self._http = http
+        self._session_id = session_id
+        self._request_id = request_id
+        self._model_cls = model_cls
+        self._on_result = _on_result
+        self._cached: T | None = None
+
+    @property
+    def request_id(self) -> str:
+        return self._request_id
+
+    def result(self, timeout: float | None = None) -> T:
+        """Block until the operation completes and return the result.
+
+        Args:
+            timeout: Max seconds to wait overall. None = wait indefinitely.
+
+        Raises:
+            TimeoutError: If timeout is exceeded before the result arrives.
+            TTTrainError: If the operation failed on the worker.
+        """
+        if self._cached is not None:
+            return self._cached
+
+        start = time.monotonic()
+        while True:
+            if timeout is not None and time.monotonic() - start > timeout:
+                raise TimeoutError(
+                    f"Timed out waiting for result of request {self._request_id}"
+                )
+
+            resp = self._http.post(
+                f"/sessions/{self._session_id}/retrieve",
+                json_body={"request_id": self._request_id},
+                timeout=_RETRIEVE_TIMEOUT,
+            )
+
+            if resp.get("type") == "try_again":
+                # Server waited 45 s, computation still running — loop immediately.
+                continue
+
+            if "error" in resp:
+                from tt_train.errors import TTTrainError
+                raise TTTrainError(resp["error"])
+
+            self._cached = self._model_cls.model_validate(resp)
+            if self._on_result is not None:
+                self._on_result(self._cached)
+            return self._cached
+
+    def __await__(self):
+        import asyncio
+        return asyncio.to_thread(self.result).__await__()
 
 
 class Sessions:
@@ -224,7 +312,7 @@ class Session:
         stop: list[str] | None = None,
         return_log_probs: bool = False,
         seed: int | None = None,
-    ) -> SampleResult:
+    ) -> APIFuture[SampleResult]:
         """
         Generate completions from current model weights.
 
@@ -270,7 +358,7 @@ class Session:
             body["seed"] = seed
 
         data = self._http.post(f"/sessions/{self.id}/sample", json_body=body)
-        return SampleResult.model_validate(data)
+        return APIFuture(self._http, self.id, data["request_id"], SampleResult)
 
     def forward_backward(
         self,
@@ -278,7 +366,7 @@ class Session:
         *,
         loss: str = "cross_entropy",
         loss_config: dict[str, Any] | None = None,
-    ) -> ForwardBackwardResult:
+    ) -> APIFuture[ForwardBackwardResult]:
         """
         Compute loss and gradients on a batch.
 
@@ -297,13 +385,9 @@ class Session:
             body["loss_config"] = loss_config
 
         data = self._http.post(f"/sessions/{self.id}/forward_backward", json_body=body)
-        result = ForwardBackwardResult.model_validate(data)
+        return APIFuture(self._http, self.id, data["request_id"], ForwardBackwardResult)
 
-        # Update local step count if the server returns it
-        self._info.step_count = max(self._info.step_count, result.session_id and 0)
-        return result
-
-    def step(self, *, max_grad_norm: float | None = None) -> StepResult:
+    def step(self, *, max_grad_norm: float | None = None) -> APIFuture[StepResult]:
         """
         Apply accumulated gradients via the optimizer.
 
@@ -323,9 +407,10 @@ class Session:
             f"/sessions/{self.id}/step",
             json_body=body if body else None,
         )
-        result = StepResult.model_validate(data)
-        self._info.step_count = result.step_number
-        return result
+        return APIFuture(
+            self._http, self.id, data["request_id"], StepResult,
+            _on_result=lambda r: setattr(self._info, "step_count", r.step_number),
+        )
 
     def save(
         self,
@@ -362,7 +447,7 @@ class Session:
     def log_probs(
         self,
         batch: list[dict[str, Any]],
-    ) -> LogProbsResult:
+    ) -> APIFuture[LogProbsResult]:
         """
         Score completions without computing gradients.
 
@@ -379,7 +464,7 @@ class Session:
             f"/sessions/{self.id}/log_probs",
             json_body={"batch": batch},
         )
-        return LogProbsResult.model_validate(data)
+        return APIFuture(self._http, self.id, data["request_id"], LogProbsResult)
 
     def eval(
         self,
@@ -388,7 +473,7 @@ class Session:
         metrics: list[str] | None = None,
         max_examples: int | None = None,
         batch_size: int = 32,
-    ) -> EvalResult:
+    ) -> APIFuture[EvalResult]:
         """
         Run evaluation (forward pass only).
 
@@ -413,7 +498,7 @@ class Session:
         body["batch_size"] = batch_size
 
         resp = self._http.post(f"/sessions/{self.id}/eval", json_body=body)
-        return EvalResult.model_validate(resp)
+        return APIFuture(self._http, self.id, resp["request_id"], EvalResult)
 
     # ----- Context manager -----
 

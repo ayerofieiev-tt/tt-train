@@ -175,6 +175,9 @@ def test_forward_backward(client):
     }))
 
     respx.post(f"{BASE}/sessions/sess_fb/forward_backward").mock(
+        return_value=httpx.Response(200, json={"request_id": "req_fwdbwd_1"})
+    )
+    respx.post(f"{BASE}/sessions/sess_fb/retrieve").mock(
         return_value=httpx.Response(200, json={
             "object": "forward_backward_result",
             "session_id": "sess_fb",
@@ -188,6 +191,25 @@ def test_forward_backward(client):
     )
 
     respx.post(f"{BASE}/sessions/sess_fb/step").mock(
+        return_value=httpx.Response(200, json={"request_id": "req_step_1"})
+    )
+
+    session = client.sessions.create(model="m", lora={"rank": 64})
+
+    future = session.forward_backward(
+        batch=[{"messages": [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello", "weight": 1},
+        ]}],
+        loss="cross_entropy",
+    )
+    result = future.result()
+    assert result.loss == 2.31
+    assert result.grad_norm == 0.45
+    assert result.cost == "$0.002"
+
+    # step mock also needs retrieve mock — reuse the same route (already registered)
+    respx.post(f"{BASE}/sessions/sess_fb/retrieve").mock(
         return_value=httpx.Response(200, json={
             "object": "step_result",
             "session_id": "sess_fb",
@@ -199,21 +221,7 @@ def test_forward_backward(client):
             "duration_ms": 12,
         })
     )
-
-    session = client.sessions.create(model="m", lora={"rank": 64})
-
-    result = session.forward_backward(
-        batch=[{"messages": [
-            {"role": "user", "content": "hi"},
-            {"role": "assistant", "content": "hello", "weight": 1},
-        ]}],
-        loss="cross_entropy",
-    )
-    assert result.loss == 2.31
-    assert result.grad_norm == 0.45
-    assert result.cost == "$0.002"
-
-    step = session.step()
+    step = session.step().result()
     assert step.step_number == 1
     assert session.step_count == 1
 

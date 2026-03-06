@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: tt_train
+      POSTGRES_USER: tt_train
+      POSTGRES_PASSWORD: tt_train
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tt_train"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      TT_TRAIN_DATABASE_URL: postgresql+asyncpg://tt_train:tt_train@db/tt_train
+      TT_TRAIN_INTERNAL_API_KEY: dev-internal-key
+      TT_TRAIN_API_KEY: dev-api-key
+      TT_TRAIN_CLUSTER_BACKEND: local
+      TT_TRAIN_API_BASE_URL: http://server:8000/v1
+      TT_TRAIN_SHARED_STORAGE_PATH: /data
+      TT_TRAIN_WORKER_SCRIPT_DIR: /app/workers
+    volumes:
+      - ./:/app
+      - shared_storage:/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  shared_storage:

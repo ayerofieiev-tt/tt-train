@@ -71,6 +71,7 @@ class HTTPClient:
         json_body: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
         idempotency_key: str | None = None,
+        timeout: httpx.Timeout | None = None,
     ) -> dict[str, Any]:
         """Make an authenticated request with automatic retries."""
         headers = {}
@@ -90,6 +91,7 @@ class HTTPClient:
                     json=json_body,
                     params=params,
                     headers=headers,
+                    **({"timeout": timeout} if timeout is not None else {}),
                 )
                 return self._handle_response(response)
 
@@ -132,8 +134,8 @@ class HTTPClient:
     def get(self, path: str, **kwargs) -> dict[str, Any]:
         return self.request("GET", path, **kwargs)
 
-    def post(self, path: str, **kwargs) -> dict[str, Any]:
-        return self.request("POST", path, **kwargs)
+    def post(self, path: str, *, timeout: httpx.Timeout | None = None, **kwargs) -> dict[str, Any]:
+        return self.request("POST", path, timeout=timeout, **kwargs)
 
     def delete(self, path: str, **kwargs) -> dict[str, Any]:
         return self.request("DELETE", path, **kwargs)

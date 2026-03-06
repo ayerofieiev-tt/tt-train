@@ -1,0 +1,348 @@
+collection:
+  post:
+    operationId: createSession
+    summary: Create an interactive training session
+    tags: [sessions]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [model]
+            properties:
+              model:
+                type: string
+              name:
+                type: string
+              lora:
+                type: object
+              optimizer:
+                type: object
+              hardware:
+                $ref: '../training-service-openapi.yaml#/components/schemas/HardwareConfig'
+              idle_timeout_minutes:
+                type: integer
+                default: 30
+              metadata:
+                type: object
+    responses:
+      '201':
+        description: Session created (status will be `provisioning` until worker registers)
+        content:
+          application/json:
+            schema:
+              $ref: '../training-service-openapi.yaml#/components/schemas/Session'
+      '400':
+        $ref: '../training-service-openapi.yaml#/components/responses/BadRequest'
+
+  get:
+    operationId: listSessions
+    summary: List sessions
+    tags: [sessions]
+    parameters:
+      - $ref: '../training-service-openapi.yaml#/components/parameters/limitParam'
+      - $ref: '../training-service-openapi.yaml#/components/parameters/afterParam'
+      - name: status
+        in: query
+        schema:
+          type: string
+    responses:
+      '200':
+        description: List of sessions
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '../training-service-openapi.yaml#/components/schemas/ListMeta'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '../training-service-openapi.yaml#/components/schemas/Session'
+
+item:
+  get:
+    operationId: getSession
+    summary: Get a session
+    tags: [sessions]
+    parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: Session
+        content:
+          application/json:
+            schema:
+              $ref: '../training-service-openapi.yaml#/components/schemas/Session'
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+
+  delete:
+    operationId: closeSession
+    summary: Close a session
+    tags: [sessions]
+    parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: Closed session
+        content:
+          application/json:
+            schema:
+              $ref: '../training-service-openapi.yaml#/components/schemas/Session'
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+
+checkpoints:
+  get:
+    operationId: listSessionCheckpoints
+    summary: List checkpoints for a session
+    tags: [sessions]
+    parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: List of checkpoints
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '../training-service-openapi.yaml#/components/schemas/ListMeta'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '../training-service-openapi.yaml#/components/schemas/Checkpoint'
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+
+forward_backward:
+  post:
+    operationId: forwardBackward
+    summary: Run a forward-backward pass (blocks until complete)
+    tags: [sessions]
+    parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              batch:
+                type: object
+    responses:
+      '200':
+        description: Forward-backward result
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                loss:
+                  type: number
+                grad_norm:
+                  type: number
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+      '503':
+        $ref: '../training-service-openapi.yaml#/components/responses/SessionNotReady'
+
+step:
+  post:
+    operationId: optimizerStep
+    summary: Apply accumulated gradients (optimizer step)
+    tags: [sessions]
+    parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+    responses:
+      '200':
+        description: Step result
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                step:
+                  type: integer
+                learning_rate:
+                  type: number
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+      '503':
+        $ref: '../training-service-openapi.yaml#/components/responses/SessionNotReady'
+
+sample:
+  post:
+    operationId: sample
+    summary: Sample from the model
+    tags: [sessions]
+    parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              prompt:
+                type: string
+              max_new_tokens:
+                type: integer
+              temperature:
+                type: number
+    responses:
+      '200':
+        description: Sample result
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text:
+                  type: string
+                tokens:
+                  type: integer
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+      '503':
+        $ref: '../training-service-openapi.yaml#/components/responses/SessionNotReady'
+
+log_probs:
+  post:
+    operationId: logProbs
+    summary: Compute log probabilities
+    tags: [sessions]
+    parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              tokens:
+                type: array
+                items:
+                  type: integer
+    responses:
+      '200':
+        description: Log probabilities
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                log_probs:
+                  type: array
+                  items:
+                    type: number
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+      '503':
+        $ref: '../training-service-openapi.yaml#/components/responses/SessionNotReady'
+
+eval:
+  post:
+    operationId: evalSession
+    summary: Run evaluation
+    tags: [sessions]
+    parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+    responses:
+      '200':
+        description: Evaluation result
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                loss:
+                  type: number
+                perplexity:
+                  type: number
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+      '503':
+        $ref: '../training-service-openapi.yaml#/components/responses/SessionNotReady'
+
+save:
+  post:
+    operationId: saveCheckpoint
+    summary: Save a checkpoint
+    tags: [sessions]
+    parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              name:
+                type: string
+              metadata:
+                type: object
+    responses:
+      '200':
+        description: Saved checkpoint
+        content:
+          application/json:
+            schema:
+              $ref: '../training-service-openapi.yaml#/components/schemas/Checkpoint'
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+      '503':
+        $ref: '../training-service-openapi.yaml#/components/responses/SessionNotReady'

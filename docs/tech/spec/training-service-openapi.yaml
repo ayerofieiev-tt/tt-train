@@ -1,0 +1,422 @@
+openapi: 3.1.0
+
+info:
+  title: Training Service API
+  version: v1
+  description: |
+    HTTP contract between the Platform and a Training Service.
+    Owned by the Platform — the Training Service must implement every endpoint defined here.
+
+    Behavioral obligations not expressible in this spec (telemetry event requirements,
+    callback guarantees, deployment modes) are defined in training-service-interface.md.
+
+servers:
+  - url: /v1
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [type, message]
+          properties:
+            type:
+              type: string
+              enum:
+                - invalid_request_error
+                - authentication_error
+                - permission_denied_error
+                - not_found_error
+                - conflict_error
+                - session_not_ready
+                - api_error
+            message:
+              type: string
+            id:
+              type: string
+
+    ListMeta:
+      type: object
+      required: [object, data, has_more]
+      properties:
+        object:
+          type: string
+          enum: [list]
+        has_more:
+          type: boolean
+        first_id:
+          type: string
+          nullable: true
+        last_id:
+          type: string
+          nullable: true
+
+    HardwareConfig:
+      type: object
+      properties:
+        accelerator:
+          type: string
+          example: wormhole
+        nodes:
+          type: integer
+          minimum: 1
+        min_nodes:
+          type: integer
+        pricing_tier:
+          type: string
+          enum: [on_demand, reserved]
+
+    Checkpoint:
+      type: object
+      required: [object, id, model_path]
+      properties:
+        object:
+          type: string
+          enum: [checkpoint]
+        id:
+          type: string
+        model_path:
+          type: string
+        job_id:
+          type: string
+          nullable: true
+        session_id:
+          type: string
+          nullable: true
+        step:
+          type: integer
+          nullable: true
+        epoch:
+          type: number
+          nullable: true
+        name:
+          type: string
+          nullable: true
+        metrics:
+          type: object
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    Job:
+      type: object
+      required: [object, id, model, method, status]
+      properties:
+        object:
+          type: string
+          enum: [job]
+        id:
+          type: string
+        name:
+          type: string
+          nullable: true
+        model:
+          type: string
+        method:
+          type: string
+          enum: [sft, rl, dpo]
+        status:
+          type: string
+          enum: [queued, running, paused, completed, failed, cancelled]
+        training_data:
+          type: string
+          nullable: true
+        validation_data:
+          type: string
+          nullable: true
+        dataset_url:
+          type: string
+          nullable: true
+        config:
+          type: object
+        hardware:
+          $ref: '#/components/schemas/HardwareConfig'
+        progress:
+          type: object
+          nullable: true
+        metrics:
+          type: object
+          nullable: true
+        result_model:
+          type: string
+          nullable: true
+        error:
+          type: object
+          nullable: true
+        cost:
+          type: object
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        metadata:
+          type: object
+        console_job_id:
+          type: string
+          nullable: true
+          description: Opaque ID assigned by the Platform; returned as-is for correlation.
+
+    Session:
+      type: object
+      required: [object, id, model, status]
+      properties:
+        object:
+          type: string
+          enum: [session]
+        id:
+          type: string
+        model:
+          type: string
+        status:
+          type: string
+          enum: [provisioning, ready, closed, failed, expired]
+        name:
+          type: string
+          nullable: true
+        lora:
+          type: object
+          nullable: true
+        optimizer:
+          type: object
+          nullable: true
+        hardware:
+          $ref: '#/components/schemas/HardwareConfig'
+        step_count:
+          type: integer
+        idle_timeout_minutes:
+          type: integer
+          nullable: true
+        last_checkpoint:
+          type: string
+          nullable: true
+        total_cost:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+        metadata:
+          type: object
+
+    Dataset:
+      type: object
+      required: [object, id, format, status]
+      properties:
+        object:
+          type: string
+          enum: [dataset]
+        id:
+          type: string
+        name:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        format:
+          type: string
+          enum: [jsonl, csv, parquet]
+        status:
+          type: string
+          enum: [ready, processing, failed]
+        bytes:
+          type: integer
+        stats:
+          type: object
+          properties:
+            examples:
+              type: integer
+            tokens:
+              type: integer
+            avg_tokens_per_example:
+              type: integer
+            max_tokens:
+              type: integer
+            min_tokens:
+              type: integer
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        metadata:
+          type: object
+
+    Model:
+      type: object
+      required: [object, id]
+      properties:
+        object:
+          type: string
+          enum: [model]
+        id:
+          type: string
+        name:
+          type: string
+          nullable: true
+        family:
+          type: string
+          nullable: true
+        params:
+          type: string
+          nullable: true
+        architecture:
+          type: string
+          nullable: true
+        max_seq_len:
+          type: integer
+          nullable: true
+        source:
+          type: string
+          enum: [catalog, checkpoint]
+        supported_methods:
+          type: array
+          items:
+            type: string
+        license:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        base_model:
+          type: string
+          nullable: true
+        job_id:
+          type: string
+          nullable: true
+        session_id:
+          type: string
+          nullable: true
+        metrics:
+          type: object
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid credentials
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    SessionNotReady:
+      description: Session worker not ready
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  parameters:
+    limitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    afterParam:
+      name: after
+      in: query
+      schema:
+        type: string
+      description: Cursor — return items after this ID
+
+paths:
+  /jobs/estimate:
+    $ref: './paths/jobs.yaml#/estimate'
+  /jobs:
+    $ref: './paths/jobs.yaml#/collection'
+  /jobs/{job_id}:
+    $ref: './paths/jobs.yaml#/item'
+  /jobs/{job_id}/cancel:
+    $ref: './paths/jobs.yaml#/cancel'
+  /jobs/{job_id}/pause:
+    $ref: './paths/jobs.yaml#/pause'
+  /jobs/{job_id}/resume:
+    $ref: './paths/jobs.yaml#/resume'
+  /jobs/{job_id}/checkpoints:
+    $ref: './paths/jobs.yaml#/checkpoints'
+  /jobs/{job_id}/metrics:
+    $ref: './paths/jobs.yaml#/metrics'
+  /jobs/{job_id}/logs:
+    $ref: './paths/jobs.yaml#/logs'
+  /jobs/{job_id}/events:
+    $ref: './paths/jobs.yaml#/events'
+
+  /sessions:
+    $ref: './paths/sessions.yaml#/collection'
+  /sessions/{session_id}:
+    $ref: './paths/sessions.yaml#/item'
+  /sessions/{session_id}/checkpoints:
+    $ref: './paths/sessions.yaml#/checkpoints'
+  /sessions/{session_id}/forward_backward:
+    $ref: './paths/sessions.yaml#/forward_backward'
+  /sessions/{session_id}/step:
+    $ref: './paths/sessions.yaml#/step'
+  /sessions/{session_id}/sample:
+    $ref: './paths/sessions.yaml#/sample'
+  /sessions/{session_id}/log_probs:
+    $ref: './paths/sessions.yaml#/log_probs'
+  /sessions/{session_id}/eval:
+    $ref: './paths/sessions.yaml#/eval'
+  /sessions/{session_id}/save:
+    $ref: './paths/sessions.yaml#/save'
+
+  /datasets:
+    $ref: './paths/datasets.yaml#/collection'
+  /datasets/{dataset_id}:
+    $ref: './paths/datasets.yaml#/item'
+
+  /models:
+    $ref: './paths/models.yaml#/collection'
+  /models/{model_path}:
+    $ref: './paths/models.yaml#/item'
+  /models/{model_path}/download:
+    $ref: './paths/models.yaml#/download'
+
+  /hardware/catalog:
+    $ref: './paths/hardware.yaml#/catalog'
+

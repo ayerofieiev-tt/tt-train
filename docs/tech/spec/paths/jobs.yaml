@@ -1,0 +1,399 @@
+estimate:
+  post:
+    operationId: estimateJob
+    summary: Estimate cost and time for a job
+    tags: [jobs]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              method:
+                type: string
+                enum: [sft, rl, dpo]
+              config:
+                type: object
+              hardware:
+                $ref: '../training-service-openapi.yaml#/components/schemas/HardwareConfig'
+    responses:
+      '200':
+        description: Cost and time estimate
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                object:
+                  type: string
+                  enum: [estimate]
+                estimated_cost:
+                  type: string
+                estimated_time_seconds:
+                  type: integer
+                estimated_steps:
+                  type: integer
+                tokens_total:
+                  type: integer
+                hardware_plan:
+                  type: object
+                cost_breakdown:
+                  type: object
+                queue_estimate:
+                  type: object
+      '401':
+        $ref: '../training-service-openapi.yaml#/components/responses/Unauthorized'
+
+collection:
+  post:
+    operationId: createJob
+    summary: Create a training job
+    tags: [jobs]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [model, method]
+            properties:
+              model:
+                type: string
+              method:
+                type: string
+                enum: [sft, rl, dpo]
+              training_data:
+                type: string
+                description: Dataset ID. Required if dataset_url is not provided.
+              dataset_url:
+                type: string
+                description: Pre-signed URL to fetch the dataset. Required if training_data is not provided.
+              validation_data:
+                type: string
+              name:
+                type: string
+              config:
+                type: object
+              hardware:
+                $ref: '../training-service-openapi.yaml#/components/schemas/HardwareConfig'
+              metadata:
+                type: object
+              console_job_id:
+                type: string
+                description: Platform-assigned job ID for correlation. Stored and returned as-is.
+              console_base_url:
+                type: string
+                description: Platform base URL for telemetry events and callbacks.
+              worker_token:
+                type: string
+                description: JWT issued by the Platform; used to authenticate telemetry and callback calls.
+              callback_url:
+                type: string
+                description: URL to POST status transitions to.
+    responses:
+      '201':
+        description: Job created
+        content:
+          application/json:
+            schema:
+              $ref: '../training-service-openapi.yaml#/components/schemas/Job'
+      '400':
+        $ref: '../training-service-openapi.yaml#/components/responses/BadRequest'
+      '401':
+        $ref: '../training-service-openapi.yaml#/components/responses/Unauthorized'
+
+  get:
+    operationId: listJobs
+    summary: List jobs
+    tags: [jobs]
+    parameters:
+      - $ref: '../training-service-openapi.yaml#/components/parameters/limitParam'
+      - $ref: '../training-service-openapi.yaml#/components/parameters/afterParam'
+      - name: status
+        in: query
+        schema:
+          type: string
+      - name: method
+        in: query
+        schema:
+          type: string
+    responses:
+      '200':
+        description: List of jobs
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '../training-service-openapi.yaml#/components/schemas/ListMeta'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '../training-service-openapi.yaml#/components/schemas/Job'
+
+item:
+  get:
+    operationId: getJob
+    summary: Get a job
+    tags: [jobs]
+    parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: Job
+        content:
+          application/json:
+            schema:
+              $ref: '../training-service-openapi.yaml#/components/schemas/Job'
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+
+cancel:
+  post:
+    operationId: cancelJob
+    summary: Cancel a job
+    tags: [jobs]
+    parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: Cancelled job
+        content:
+          application/json:
+            schema:
+              $ref: '../training-service-openapi.yaml#/components/schemas/Job'
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+
+pause:
+  post:
+    operationId: pauseJob
+    summary: Pause a job
+    tags: [jobs]
+    parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: Paused job
+        content:
+          application/json:
+            schema:
+              $ref: '../training-service-openapi.yaml#/components/schemas/Job'
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+
+resume:
+  post:
+    operationId: resumeJob
+    summary: Resume a paused job
+    tags: [jobs]
+    parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              hardware:
+                $ref: '../training-service-openapi.yaml#/components/schemas/HardwareConfig'
+    responses:
+      '200':
+        description: Resumed job
+        content:
+          application/json:
+            schema:
+              $ref: '../training-service-openapi.yaml#/components/schemas/Job'
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+
+checkpoints:
+  get:
+    operationId: listJobCheckpoints
+    summary: List checkpoints for a job
+    tags: [jobs]
+    parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: List of checkpoints
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '../training-service-openapi.yaml#/components/schemas/ListMeta'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '../training-service-openapi.yaml#/components/schemas/Checkpoint'
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+
+metrics:
+  get:
+    operationId: listJobMetrics
+    summary: List training metrics for a job
+    tags: [jobs]
+    parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+    responses:
+      '200':
+        description: List of metric records
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                object:
+                  type: string
+                  enum: [list]
+                job_id:
+                  type: string
+                data:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      step:
+                        type: integer
+                      epoch:
+                        type: number
+                        nullable: true
+                      train_loss:
+                        type: number
+                        nullable: true
+                      val_loss:
+                        type: number
+                        nullable: true
+                      grad_norm:
+                        type: number
+                        nullable: true
+                      learning_rate:
+                        type: number
+                        nullable: true
+                      tokens_per_second:
+                        type: number
+                        nullable: true
+                      recorded_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+
+logs:
+  get:
+    operationId: listJobLogs
+    summary: List log entries for a job
+    tags: [jobs]
+    parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: log_type
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 200
+    responses:
+      '200':
+        description: List of log entries
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                object:
+                  type: string
+                  enum: [list]
+                job_id:
+                  type: string
+                has_more:
+                  type: boolean
+                data:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      step:
+                        type: integer
+                        nullable: true
+                      log_type:
+                        type: string
+                      message:
+                        type: string
+                      logged_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'
+
+events:
+  get:
+    operationId: streamJobEvents
+    summary: Stream job events (SSE)
+    tags: [jobs]
+    parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: after_step
+        in: query
+        schema:
+          type: integer
+    responses:
+      '200':
+        description: |
+          Server-Sent Events stream. Event types:
+          - `job.progress` — training step progress
+          - `job.completed` — job finished successfully
+          - `job.failed` — job failed
+          - `job.cancelled` — job was cancelled
+          - `done` — stream closed
+        content:
+          text/event-stream:
+            schema:
+              type: string
+      '404':
+        $ref: '../training-service-openapi.yaml#/components/responses/NotFound'

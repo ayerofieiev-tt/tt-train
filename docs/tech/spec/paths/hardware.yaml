@@ -1,0 +1,12 @@
+catalog:
+  get:
+    operationId: getHardwareCatalog
+    summary: Get available hardware configurations
+    tags: [hardware]
+    responses:
+      '200':
+        description: Hardware catalog
+        content:
+          application/json:
+            schema:
+              type: object
